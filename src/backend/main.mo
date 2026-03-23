@@ -10,17 +10,11 @@ import Authorization "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
 
 actor {
-  // Types and Modules
-
   type StudentId = Nat;
   type FeeCategoryId = Nat;
   type PaymentId = Nat;
 
-  public type Frequency = {
-    #annual;
-    #termly;
-    #monthly;
-  };
+  public type Frequency = { #annual; #termly; #monthly };
 
   public type Student = {
     name : Text;
@@ -53,9 +47,7 @@ actor {
     notes : Text;
   };
 
-  public type UserProfile = {
-    name : Text;
-  };
+  public type UserProfile = { name : Text };
 
   module Student {
     public func compare(s1 : Student, s2 : Student) : Order.Order {
@@ -68,8 +60,6 @@ actor {
       Text.compare(f1.name, f2.name);
     };
   };
-
-  // Persistent State
 
   let accessControlState = Authorization.initState();
   include MixinAuthorization(accessControlState);
@@ -85,35 +75,29 @@ actor {
   var nextPaymentId = 1;
   var nextAssignmentId = 1;
 
-  // User Profile Management
+  func requireAuth(caller : Principal) {
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Please sign in first");
+    };
+  };
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (Authorization.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view profiles");
-    };
+    requireAuth(caller);
     userProfiles.get(caller);
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
-    if (caller != user and not Authorization.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Can only view your own profile");
-    };
+    requireAuth(caller);
     userProfiles.get(user);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (Authorization.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
-    };
+    requireAuth(caller);
     userProfiles.add(caller, profile);
   };
 
-  // Student Management
-
   public shared ({ caller }) func registerStudent(student : Student) : async StudentId {
-    if (not (Authorization.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can register students");
-    };
+    requireAuth(caller);
     let id = nextStudentId;
     nextStudentId += 1;
     studentMap.add(id, { student with enrollmentDate = Time.now() });
@@ -121,9 +105,7 @@ actor {
   };
 
   public query ({ caller }) func getStudent(id : StudentId) : async Student {
-    if (not (Authorization.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view student data");
-    };
+    requireAuth(caller);
     switch (studentMap.get(id)) {
       case (null) { Runtime.trap("Student not found") };
       case (?student) { student };
@@ -131,18 +113,12 @@ actor {
   };
 
   public query ({ caller }) func getAllStudents() : async [Student] {
-    if (not (Authorization.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view student data");
-    };
+    requireAuth(caller);
     studentMap.values().toArray().sort();
   };
 
-  // Fee Category Management
-
   public shared ({ caller }) func createFeeCategory(category : FeeCategory) : async FeeCategoryId {
-    if (not (Authorization.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can create fee categories");
-    };
+    requireAuth(caller);
     let id = nextFeeCategoryId;
     nextFeeCategoryId += 1;
     feeCategoryMap.add(id, category);
@@ -150,9 +126,7 @@ actor {
   };
 
   public query ({ caller }) func getFeeCategory(id : FeeCategoryId) : async FeeCategory {
-    if (not (Authorization.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view fee categories");
-    };
+    requireAuth(caller);
     switch (feeCategoryMap.get(id)) {
       case (null) { Runtime.trap("Fee category not found") };
       case (?category) { category };
@@ -160,44 +134,25 @@ actor {
   };
 
   public query ({ caller }) func getAllFeeCategories() : async [FeeCategory] {
-    if (not (Authorization.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view fee categories");
-    };
+    requireAuth(caller);
     feeCategoryMap.values().toArray().sort();
   };
 
-  // Fee Assignment
-
   public shared ({ caller }) func assignFee(studentId : StudentId, feeCategoryId : FeeCategoryId, academicYear : Text) : async Nat {
-    if (not (Authorization.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can assign fees");
-    };
+    requireAuth(caller);
     let assignmentId = nextAssignmentId;
     nextAssignmentId += 1;
-    feeAssignments.add(
-      assignmentId,
-      {
-        studentId;
-        feeCategoryId;
-        academicYear;
-      },
-    );
+    feeAssignments.add(assignmentId, { studentId; feeCategoryId; academicYear });
     assignmentId;
   };
 
   public query ({ caller }) func getFeeAssignmentsByStudent(studentId : StudentId) : async [FeeAssignment] {
-    if (not (Authorization.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view fee assignments");
-    };
+    requireAuth(caller);
     feeAssignments.values().toArray().filter(func(a) { a.studentId == studentId });
   };
 
-  // Payments
-
   public shared ({ caller }) func recordPayment(payment : Payment) : async PaymentId {
-    if (not (Authorization.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can record payments");
-    };
+    requireAuth(caller);
     let id = nextPaymentId;
     nextPaymentId += 1;
     paymentMap.add(id, { payment with date = Time.now() });
@@ -205,9 +160,7 @@ actor {
   };
 
   public query ({ caller }) func getPaymentsByStudent(studentId : StudentId) : async [Payment] {
-    if (not (Authorization.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view payments");
-    };
+    requireAuth(caller);
     paymentMap.values().toArray().filter(func(p) { p.studentId == studentId });
   };
 };
